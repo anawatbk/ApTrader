@@ -16,6 +16,9 @@ SAVE_DIR = '~/workspace/data/us_stocks/'
 def download(prefix: str, start_date: str, end_date: str = None):
     bucket_name = 'flatfiles'
     start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+    if prefix is None:
+        logger.info("Please provide bucket prefix.")
+        return
     if end_date is None:
         end_date = datetime.now().date()
     else:
@@ -97,5 +100,5 @@ def download(prefix: str, start_date: str, end_date: str = None):
 
 
 if __name__ == "__main__":
-    download('us_stocks_sip/minute_aggs_v1/', '2015-02-17')
+    download('us_stocks_sip/minute_aggs_v1/', '2015-02-25')
 
