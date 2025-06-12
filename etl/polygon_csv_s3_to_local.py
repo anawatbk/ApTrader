@@ -9,8 +9,12 @@ from pathlib import Path
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configure Storage
+# Configure Local Storage DIR
 SAVE_DIR = '~/workspace/data/us_stocks/'
+
+# Instantiate Polygon Keys
+access_key = os.environ.get("POLYGON_ACCESS_KEY")
+secret_access_key = os.environ.get("POLYGON_SECRET_KEY")
 
 
 def download(prefix: str, start_date: str, end_date: str = None):
@@ -25,8 +29,7 @@ def download(prefix: str, start_date: str, end_date: str = None):
         end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
 
     logger.info(f"Downloading data from {start_date} to {end_date}")
-    access_key = os.environ.get("POLYGON_ACCESS_KEY")
-    secret_access_key = os.environ.get("POLYGON_SECRET_KEY")
+
     logger.info(
         f"Connecting to Polygon S3 with aws_access_key_id={access_key} aws_secret_access_key={secret_access_key}")
 
@@ -70,7 +73,7 @@ def download(prefix: str, start_date: str, end_date: str = None):
             if start_date <= date <= end_date:
                 obj_key_list.append(key)
 
-    #print(obj_key_list)
+    # print(obj_key_list)
     #     parts = key.split("/")
     #     if len(parts) > 1:
     #         first_level_dir = "/".join(parts[:2])  # Extract "flatfiles/data1"
@@ -100,5 +103,4 @@ def download(prefix: str, start_date: str, end_date: str = None):
 
 
 if __name__ == "__main__":
-    download('us_stocks_sip/minute_aggs_v1/', '2015-02-25')
-
+    download('us_stocks_sip/minute_aggs_v1/', '2015-02-25', '2025-03-11')

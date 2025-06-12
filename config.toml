@@ -1,0 +1,52 @@
+# ApTrader TEst Configuration File
+
+environment = "development"
+
+[aws]
+region = "us-east-1"
+profile = "default"
+
+
+[aws.s3]
+polygon_bucket = "your-polygon-bucket"
+output_bucket = "your-output-bucket"
+scripts_bucket = "your-glue-scripts-bucket"
+
+[aws.glue]
+database_name = "polygon_data"
+table_name = "us_stocks_minute_aggs"
+job_name = "polygon-csv-to-parquet-etl"
+worker_type = "G.1X"
+num_workers = 5
+timeout = 2880
+
+[polygon]
+s3_endpoint = "https://files.polygon.io"
+bucket_name = "flatfiles"
+
+
+[paths]
+data_dir = "~/workspace/data/us_stocks"
+logs_dir = "logs"
+temp_dir = "temp"
+
+[spark]
+app_name = "ApTrader-ETL"
+master = "local[*]"
+driver_memory = "4g"
+executor_memory = "4g"
+
+[etl]
+partition_columns = ["year", "ticker"]
+max_records_per_file = 1000000
+batch_size = 10000
+
+[data_client]
+base_prefix = "parquet"
+cache_enabled = false
+cache_dir = "~/.aptrader_cache"
+max_memory_usage = "1GB"
+
+[logging]
+level = "INFO"
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

@@ -1,0 +1,180 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aptrader"
+version = "0.1.0"
+description = "Algorithmic trading analysis and data processing tools"
+readme = "README.md"
+requires-python = ">=3.13.0"
+license = {text = "MIT"}
+authors = [
+    {name = "ApTrader Team", email = "anawatbk@gmail.com"},
+]
+keywords = ["trading", "finance", "data-analysis", "stocks", "s3", "etl"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+
+# Core runtime dependencies
+dependencies = [
+    "pandas>=2.2.3",
+    "numpy>=2.2.3",
+    "s3fs>=0.4.2",
+    "boto3>=1.37.2",
+    "botocore>=1.37.2",
+    "fsspec>=2025.2.0",
+    "python-dateutil>=2.9.0",
+    "pytz>=2025.1",
+    "requests>=2.32.3",
+    "PyYAML>=6.0.2",
+]
+
+# Optional dependencies for different use cases
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=22.0.0",
+    "isort>=5.0.0",
+    "flake8>=5.0.0",
+    "mypy>=1.0.0",
+]
+
+jupyter = [
+    "jupyter>=1.0.0",
+    "jupyterlab>=4.3.5",
+    "ipykernel>=6.29.5",
+    "matplotlib>=3.10.0",
+    "bokeh>=3.6.3",
+]
+
+etl = [
+    "tables>=3.10.2",
+    "blosc2>=3.1.1",
+    "codetiming>=1.4.0",
+]
+
+web = [
+    "aiohttp>=3.11.13",
+    "httpx>=0.28.1",
+    "beautifulsoup4>=4.13.3",
+]
+
+all = [
+    "aptrader[dev,jupyter,etl,web]",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/ApTrader"
+Documentation = "https://github.com/yourusername/ApTrader/docs"
+Repository = "https://github.com/yourusername/ApTrader"
+Issues = "https://github.com/yourusername/ApTrader/issues"
+
+# Package discovery and inclusion
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["clients*", "data_handler*", "etl*", "utils*", "bulk_downloader*"]
+exclude = ["tests*", "docs*", "notebooks*", "lambdas*", "bmad-agent*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.toml", "*.yaml", "*.yml", "*.json"]
+
+# Entry points for command-line tools (optional)
+[project.scripts]
+aptrader = "main:main"
+
+# Tool configurations
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--disable-warnings",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+[tool.coverage.run]
+source = ["clients", "data_handler", "etl", "utils", "bulk_downloader"]
+omit = [
+    "tests/*",
+    "setup.py",
+    "*/migrations/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py313']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | lambdas
+  | bmad-agent
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["clients", "data_handler", "etl", "utils", "bulk_downloader"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "s3fs.*",
+    "boto3.*",
+    "botocore.*",
+    "pandas.*",
+    "numpy.*",
+]
+ignore_missing_imports = true
