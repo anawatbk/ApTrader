@@ -1,0 +1,39 @@
+# BMAD Session Files (optional - remove if you want to track these)
+docs/.bmad-session/checkpoint-*.md
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Package files
+dist/
+build/
+
+# Lambda deployment packages
+*.zip
+
+# Data and temporary files
+*.parquet
+*.csv.gz

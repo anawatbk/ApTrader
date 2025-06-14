@@ -100,7 +100,9 @@ def download(prefix: str, start_date: str, end_date: str = None):
             continue
         s3.download_file(bucket_name, obj_key, local_file_path)
     logger.info(f"Finished Downloading.")
-
+    
+    # print all items in my s3 bucket
+    
 
 if __name__ == "__main__":
     download('us_stocks_sip/minute_aggs_v1/', '2015-02-25', '2025-03-11')

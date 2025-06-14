@@ -40,7 +40,7 @@ def lambda_handler(event, context):
             writer.writeheader()
 
         writer.writerow(row)
-        print(f"Read split of {split.ticker} on date={split.execution_date}")
+        # print(f"Read split of {split.ticker} on date={split.execution_date}")
 
     csv_content = buffer.getvalue()
 
