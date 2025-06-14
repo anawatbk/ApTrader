@@ -1,9 +1,26 @@
 import logging
+import sys
 
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import s3fs
+
+# Handle AWS Glue imports for local development
+try:
+    from awsglue.utils import getResolvedOptions
+    GLUE_AVAILABLE = True
+except ImportError:
+    GLUE_AVAILABLE = False
+    def getResolvedOptions(argv, options):
+        """Mock implementation for local testing"""
+        if len(argv) < 2:
+            print("Local testing mode - using default year 2024")
+            return {'JOB_NAME': 'local-test', 'YEAR': '2024'}
+        else:
+            # Parse local command line arguments
+            year = argv[1] if len(argv) > 1 else '2024'
+            return {'JOB_NAME': 'local-test', 'YEAR': year}
 
 S3_CSV_INPUT_TEMPLATE = 's3://anawatp-us-stocks/csv/{year}-*.csv.gz'
 PARQUET_OUTPUT_PATH = 's3://anawatp-us-stocks/parquet'
@@ -13,7 +30,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 
 # Initialize s3fs
-fs = s3fs.S3FileSystem(anon=False)  # set anon=True for public buckets
 BUCKET = 'anawatp-us-stocks'
 PREFIX = 'csv'  # base prefix, we'll filter for 2025 later
 
@@ -155,21 +171,41 @@ def convert_csv_to_parquet(year: int):
     logger.info(f"Parquet export completed successfully for {len(processed_tickers)} tickers")
 
 
-if __name__ == "__main__":
-    import sys
-    
-    if len(sys.argv) != 2:
-        print("Usage: python s3_csv_to_s3_parquet_job.py <year>")
-        print("Example: python s3_csv_to_s3_parquet_job.py 2024")
-        sys.exit(1)
-    
+def main():
+    """
+    Main function for Glue Python Shell job (supports local testing)
+    """
     try:
-        year = int(sys.argv[1])
-        logger.info(f"Starting ETL job for year: {year}")
+        # Detect environment and get parameters
+        if GLUE_AVAILABLE:
+            logger.info("Running in AWS Glue environment")
+            args = getResolvedOptions(sys.argv, ['JOB_NAME', 'YEAR'])
+        else:
+            logger.info("Running in local development environment")
+            args = getResolvedOptions(sys.argv, ['JOB_NAME', 'YEAR'])
+        
+        job_name = args['JOB_NAME']
+        year = int(args['YEAR'])
+        
+        logger.info(f"ETL job: {job_name}")
+        logger.info(f"Processing year: {year}")
+        logger.info(f"Glue libraries available: {GLUE_AVAILABLE}")
+        
+        # Run the ETL process
         convert_csv_to_parquet(year)
-    except ValueError:
-        print("Error: Year must be an integer")
-        sys.exit(1)
+        
+        if GLUE_AVAILABLE:
+            logger.info("AWS Glue Python Shell ETL job completed successfully")
+        else:
+            logger.info("Local ETL job completed successfully")
+        
+    except ValueError as e:
+        logger.error(f"Invalid year parameter: {str(e)}")
+        raise
     except Exception as e:
-        logger.error(f"ETL job failed: {str(e)}")
-        sys.exit(1)
+        logger.error(f"Glue Python Shell ETL job failed: {str(e)}")
+        raise
+
+
+if __name__ == "__main__":
+    main()
