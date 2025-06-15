@@ -27,7 +27,8 @@ classifiers = [
 dependencies = [
     "pandas>=2.2.3",
     "numpy>=2.2.3",
-    "s3fs>=0.4.2",
+    "pyarrow>=14.0.1",
+    "s3fs>=2024.6.1",
     "boto3>=1.37.2",
     "botocore>=1.37.2",
     "fsspec>=2025.2.0",
@@ -35,6 +36,7 @@ dependencies = [
     "pytz>=2025.1",
     "requests>=2.32.3",
     "PyYAML>=6.0.2",
+    "polygon-api-client>=1.14.4",
 ]
 
 # Optional dependencies for different use cases
