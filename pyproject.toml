@@ -42,8 +42,9 @@ dependencies = [
 # Optional dependencies for different use cases
 [project.optional-dependencies]
 dev = [
-    "pytest>=6.0.0",
+    "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    # "pytest-spark>=0.6.0",  # Temporarily disabled - PySpark 4.0 compatibility issues
     "black>=22.0.0",
     "isort>=5.0.0",
     "flake8>=5.0.0",
@@ -62,6 +63,8 @@ etl = [
     "tables>=3.10.2",
     "blosc2>=3.1.1",
     "codetiming>=1.4.0",
+    "pyspark==3.5.4",
+    "py4j>=0.10.9.7",
 ]
 
 web = [

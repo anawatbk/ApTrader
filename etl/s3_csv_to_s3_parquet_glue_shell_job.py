@@ -14,13 +14,20 @@ except ImportError:
     GLUE_AVAILABLE = False
     def getResolvedOptions(argv, options):
         """Mock implementation for local testing"""
-        if len(argv) < 2:
-            print("Local testing mode - using default year 2024")
-            return {'YEAR': '2024'}
-        else:
-            # Parse local command line arguments
-            year = argv[1] if len(argv) > 1 else '2024'
-            return {'YEAR': year}
+        result = {}
+        
+        # Set default values for common options
+        if 'JOB_NAME' in options:
+            result['JOB_NAME'] = 'local-test'
+        
+        if 'YEAR' in options:
+            if len(argv) > 1:
+                # Parse year from command line arguments
+                result['YEAR'] = argv[1]
+            else:
+                result['YEAR'] = '2025'
+        
+        return result
 
 S3_CSV_INPUT_TEMPLATE = 's3://anawatp-us-stocks/csv/{year}-*.csv.gz'
 PARQUET_OUTPUT_PATH = 's3://anawatp-us-stocks/parquet'

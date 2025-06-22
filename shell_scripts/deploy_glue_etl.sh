@@ -8,13 +8,24 @@ set -e  # Exit on any error
 # Configuration
 AWS_REGION="us-west-2"
 DEFAULT_S3_BUCKET="ap-glue-scripts-bucket"
-SCRIPT_NAME="s3_csv_to_s3_parquet_glue_shell_job.py"
-LOCAL_SCRIPT_PATH="etl/${SCRIPT_NAME}"
-JOB_NAME="csv-to-parquet-etl"
+DEFAULT_SHELL_SCRIPT="s3_csv_to_s3_parquet_shell_job.py"
+DEFAULT_SPARK_SCRIPT="s3_csv_to_s3_parquet_spark_job.py"
 GLUE_ROLE_NAME="AWSGlueServiceRole-Default"
-PYARROW_VERSION="14.0.1"
-MAX_CAPACITY=1
-TIMEOUT=2880  # 48 hours in minutes
+
+# Job type specific configurations
+SHELL_JOB_CONFIG=(
+    "MAX_CAPACITY=1.0"
+    "TIMEOUT=2880"
+    "WORKER_TYPE="
+    "NUMBER_OF_WORKERS="
+)
+
+SPARK_JOB_CONFIG=(
+    "MAX_CAPACITY="
+    "TIMEOUT=2880"
+    "WORKER_TYPE=G.1X"
+    "NUMBER_OF_WORKERS=2"
+)
 
 # Colors for output
 RED='\033[0;31m'
@@ -22,6 +33,106 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Job type detection and configuration
+detect_job_type() {
+    local script_name="$1"
+    local manual_type="$2"
+    
+    # Manual override takes precedence
+    if [ -n "$manual_type" ]; then
+        case "$manual_type" in
+            "spark"|"glueetl")
+                echo "spark"
+                return
+                ;;
+            "shell"|"pythonshell")
+                echo "shell"
+                return
+                ;;
+            *)
+                log_error "Invalid job type: $manual_type. Use 'spark' or 'shell'"
+                exit 1
+                ;;
+        esac
+    fi
+    
+    # Auto-detect based on script name
+    if [[ "$script_name" == *"spark"* ]]; then
+        echo "spark"
+    elif [[ "$script_name" == *"shell"* ]]; then
+        echo "shell"
+    else
+        # Default to shell for backward compatibility
+        log_warning "Could not auto-detect job type from script name: $script_name"
+        log_warning "Defaulting to Python Shell job. Use --job-type to override."
+        echo "shell"
+    fi
+}
+
+set_job_config() {
+    local job_type="$1"
+    
+    if [ "$job_type" = "spark" ]; then
+        # Load Spark job configuration
+        for config in "${SPARK_JOB_CONFIG[@]}"; do
+            export "$config"
+        done
+        COMMAND_TYPE="glueetl"
+        JOB_TYPE_DISPLAY="Spark (glueetl)"
+    else
+        # Load Shell job configuration
+        for config in "${SHELL_JOB_CONFIG[@]}"; do
+            export "$config"
+        done
+        COMMAND_TYPE="pythonshell"
+        JOB_TYPE_DISPLAY="Python Shell (pythonshell)"
+    fi
+}
+
+show_job_info() {
+    local script_name="$1"
+    local job_name="$2"
+    local job_type="$3"
+    
+    log_info "=== JOB CONFIGURATION ==="
+    log_info "Script: $script_name"
+    log_info "Job Name: $job_name"
+    log_info "Job Type: $JOB_TYPE_DISPLAY"
+    log_info "Command Type: $COMMAND_TYPE"
+    
+    if [ "$job_type" = "spark" ]; then
+        log_info "Worker Type: $WORKER_TYPE"
+        log_info "Number of Workers: $NUMBER_OF_WORKERS"
+    else
+        log_info "Max Capacity: $MAX_CAPACITY DPU"
+    fi
+    
+    log_info "Timeout: $TIMEOUT minutes"
+    log_info "AWS Region: $AWS_REGION"
+    log_info "S3 Bucket: $S3_BUCKET"
+    log_info "=========================="
+}
+
+list_available_scripts() {
+    log_info "Available ETL scripts in etl/ directory:"
+    if [ -d "etl" ]; then
+        for script in etl/*.py; do
+            if [ -f "$script" ]; then
+                script_basename=$(basename "$script")
+                if [[ "$script_basename" == *"spark"* ]]; then
+                    echo "  ✓ $script_basename (Spark job)"
+                elif [[ "$script_basename" == *"shell"* ]]; then
+                    echo "  ✓ $script_basename (Python Shell job)"
+                else
+                    echo "  ? $script_basename (Unknown type - will default to Shell)"
+                fi
+            fi
+        done
+    else
+        log_warning "etl/ directory not found"
+    fi
+}
 
 # Helper functions
 log_info() {
@@ -104,9 +215,9 @@ check_iam_role() {
 create_glue_job() {
     local script_location="$1"
     local role_arn="$2"
+    local job_type="$3"
     
-    log_info "Creating Glue job: $JOB_NAME"
-    log_info "Installing additional Python modules: pyarrow==$PYARROW_VERSION"
+    log_info "Creating Glue job: $JOB_NAME ($JOB_TYPE_DISPLAY)"
     
     # Check if job already exists
     if aws glue get-job --region "$AWS_REGION" --job-name "$JOB_NAME" &> /dev/null; then
@@ -114,39 +225,64 @@ create_glue_job() {
         read -p "Do you want to update it? (y/N): " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            update_glue_job "$script_location" "$role_arn"
+            update_glue_job "$script_location" "$role_arn" "$job_type"
         else
             log_info "Skipping job creation"
         fi
         return
     fi
     
-    aws glue create-job \
-        --region "$AWS_REGION" \
-        --name "$JOB_NAME" \
-        --role "$role_arn" \
-        --command Name=pythonshell,ScriptLocation="$script_location",PythonVersion=3.9 \
-        --default-arguments "{\"--job-bookmark-option\":\"job-bookmark-disable\",\"--additional-python-modules\":\"pyarrow==$PYARROW_VERSION\"}" \
-        --max-capacity "$MAX_CAPACITY" \
-        --timeout "$TIMEOUT" \
-        --description "ETL job to convert S3 CSV files to partitioned Parquet format with timezone conversion and trading hours filtering"
+    # Build command based on job type
+    if [ "$job_type" = "spark" ]; then
+        # Spark job configuration
+        aws glue create-job \
+            --region "$AWS_REGION" \
+            --name "$JOB_NAME" \
+            --role "$role_arn" \
+            --command Name="$COMMAND_TYPE",ScriptLocation="$script_location" \
+            --default-arguments "{\"--job-bookmark-option\":\"job-bookmark-disable\",\"--enable-continuous-cloudwatch-log\":\"true\",\"--enable-metrics\":\"\"}" \
+            --worker-type "$WORKER_TYPE" \
+            --number-of-workers "$NUMBER_OF_WORKERS" \
+            --timeout "$TIMEOUT" \
+            --description "Spark ETL job to convert S3 CSV files to partitioned Parquet format with distributed processing"
+    else
+        # Python Shell job configuration  
+        aws glue create-job \
+            --region "$AWS_REGION" \
+            --name "$JOB_NAME" \
+            --role "$role_arn" \
+            --command Name="$COMMAND_TYPE",ScriptLocation="$script_location",PythonVersion=3.9 \
+            --default-arguments "{\"--job-bookmark-option\":\"job-bookmark-disable\",\"--enable-continuous-cloudwatch-log\":\"true\",\"--enable-metrics\":\"\"}" \
+            --max-capacity "$MAX_CAPACITY" \
+            --timeout "$TIMEOUT" \
+            --description "Python Shell ETL job to convert S3 CSV files to partitioned Parquet format"
+    fi
     
-    log_success "Glue job created: $JOB_NAME"
+    log_success "Glue job created: $JOB_NAME ($JOB_TYPE_DISPLAY)"
 }
 
 update_glue_job() {
     local script_location="$1"
     local role_arn="$2"
+    local job_type="$3"
     
-    log_info "Updating Glue job: $JOB_NAME"
-    log_info "Installing additional Python modules: pyarrow==$PYARROW_VERSION"
+    log_info "Updating Glue job: $JOB_NAME ($JOB_TYPE_DISPLAY)"
     
-    aws glue update-job \
-        --region "$AWS_REGION" \
-        --job-name "$JOB_NAME" \
-        --job-update Role="$role_arn",Command='{Name=pythonshell,ScriptLocation='$script_location',PythonVersion=3.9}',DefaultArguments='{"--job-bookmark-option":"job-bookmark-disable","--additional-python-modules":"pyarrow='$PYARROW_VERSION'"}',MaxCapacity="$MAX_CAPACITY",Timeout="$TIMEOUT"
+    if [ "$job_type" = "spark" ]; then
+        # Spark job update
+        aws glue update-job \
+            --region "$AWS_REGION" \
+            --job-name "$JOB_NAME" \
+            --job-update Role="$role_arn",Command="{Name=$COMMAND_TYPE,ScriptLocation=$script_location}",DefaultArguments='{"--job-bookmark-option":"job-bookmark-disable","--enable-continuous-cloudwatch-log":"true","--enable-metrics":""}',WorkerType="$WORKER_TYPE",NumberOfWorkers="$NUMBER_OF_WORKERS",Timeout="$TIMEOUT"
+    else
+        # Python Shell job update
+        aws glue update-job \
+            --region "$AWS_REGION" \
+            --job-name "$JOB_NAME" \
+            --job-update Role="$role_arn",Command="{Name=$COMMAND_TYPE,ScriptLocation=$script_location,PythonVersion=3.9}",DefaultArguments='{"--job-bookmark-option":"job-bookmark-disable","--enable-continuous-cloudwatch-log":"true","--enable-metrics":""}',MaxCapacity="$MAX_CAPACITY",Timeout="$TIMEOUT"
+    fi
     
-    log_success "Glue job updated: $JOB_NAME"
+    log_success "Glue job updated: $JOB_NAME ($JOB_TYPE_DISPLAY)"
 }
 
 run_glue_job() {
@@ -247,31 +383,56 @@ delete_job() {
 }
 
 show_usage() {
-    echo "AWS Glue ETL Deployment and Execution Script"
+    echo "Enhanced AWS Glue ETL Deployment and Execution Script"
+    echo "Supports both Python Shell and Spark jobs with auto-detection"
     echo
     echo "Usage: $0 [COMMAND] [OPTIONS]"
     echo
     echo "Commands:"
-    echo "  deploy [S3_BUCKET]     Deploy the ETL script to AWS Glue (uses default if not provided)"
-    echo "  run <YEAR>             Execute the ETL job for a specific year"
-    echo "  monitor <JOB_RUN_ID>   Monitor a running job"
-    echo "  list                   List existing Glue jobs"
-    echo "  delete                 Delete the Glue job"
-    echo "  help                   Show this help message"
+    echo "  deploy [SCRIPT] [--options]    Deploy ETL script to AWS Glue"
+    echo "  run <YEAR> [JOB_NAME]          Execute ETL job for specific year"
+    echo "  monitor <JOB_RUN_ID>           Monitor a running job"
+    echo "  list                           List existing Glue jobs"
+    echo "  delete [JOB_NAME]              Delete the specified Glue job"
+    echo "  help                           Show this help message"
+    echo
+    echo "Deploy Options:"
+    echo "  --job-type spark|shell         Override auto-detected job type"
+    echo "  --bucket BUCKET_NAME           Specify S3 bucket (default: $DEFAULT_S3_BUCKET)"
+    echo "  --list-scripts                 List available scripts with detected types"
+    echo "  --help, -h                     Show deploy help"
+    echo
+    echo "Auto-Detection Rules:"
+    echo "  Scripts with 'spark' in name   → Spark job (glueetl)"
+    echo "  Scripts with 'shell' in name   → Python Shell job (pythonshell)"
+    echo "  Other scripts                  → Default to Python Shell"
+    echo
+    echo "Job Type Configurations:"
+    echo "  Python Shell: 1 DPU, 2880min timeout"
+    echo "  Spark:        G.1X workers (2), 2880min timeout"
+    echo
+    echo "Examples:"
+    echo "  # Auto-detect job type from script name:"
+    echo "  $0 deploy s3_csv_to_s3_parquet_spark_job.py    # → Spark job"
+    echo "  $0 deploy s3_csv_to_s3_parquet_shell_job.py    # → Python Shell job"
+    echo
+    echo "  # Manual job type override:"
+    echo "  $0 deploy my_script.py --job-type spark"
+    echo
+    echo "  # Custom bucket:"
+    echo "  $0 deploy my_script.py --bucket my-custom-bucket"
+    echo
+    echo "  # Run jobs:"
+    echo "  $0 run 2025 s3-csv-to-s3-parquet-spark-job"
+    echo "  $0 run 2025                                     # Uses default job"
+    echo
+    echo "  # List available scripts:"
+    echo "  $0 deploy --list-scripts"
     echo
     echo "Configuration:"
     echo "  AWS_REGION: $AWS_REGION"
     echo "  DEFAULT_S3_BUCKET: $DEFAULT_S3_BUCKET"
-    echo
-    echo "Examples:"
-    echo "  $0 deploy my-glue-scripts-bucket"
-    echo "  $0 deploy  # Uses default S3 bucket"
-    echo "  $0 run 2024"
-    echo "  $0 monitor jr_1234567890abcdef"
-    echo
-    echo "Environment Variables:"
-    echo "  GLUE_ROLE_NAME         IAM role name (default: AWSGlueServiceRole)"
-    echo "  JOB_NAME               Glue job name (default: csv-to-parquet-etl)"
+    echo "  GLUE_ROLE_NAME: $GLUE_ROLE_NAME"
 }
 
 # Main script logic
@@ -280,22 +441,94 @@ main() {
     
     case "$command" in
         "deploy")
-            local s3_bucket="${2:-$DEFAULT_S3_BUCKET}"
+            # Parse arguments with support for script name and job type override
+            local s3_bucket="$DEFAULT_S3_BUCKET"
+            local script_name=""
+            local manual_job_type=""
             
+            # Parse named and positional arguments
+            shift # Remove 'deploy' command
+            while [[ $# -gt 0 ]]; do
+                case $1 in
+                    --job-type)
+                        manual_job_type="$2"
+                        shift 2
+                        ;;
+                    --bucket)
+                        s3_bucket="$2"
+                        shift 2
+                        ;;
+                    --help|-h)
+                        show_usage
+                        exit 0
+                        ;;
+                    --list-scripts)
+                        list_available_scripts
+                        exit 0
+                        ;;
+                    *)
+                        if [ -z "$script_name" ] && [[ "$1" == *.py ]]; then
+                            script_name="$1"
+                        else
+                            log_error "Unknown argument: $1"
+                            show_usage
+                            exit 1
+                        fi
+                        shift
+                        ;;
+                esac
+            done
+            
+            # Set default script if none provided
+            if [ -z "$script_name" ]; then
+                script_name="$DEFAULT_SHELL_SCRIPT"
+                log_info "No script specified, using default: $script_name"
+            fi
+            
+            # Auto-detect job type
+            local job_type=$(detect_job_type "$script_name" "$manual_job_type")
+            
+            # Set job configuration based on type
+            set_job_config "$job_type"
+            
+            # Set global variables
+            SCRIPT_NAME="$script_name"
+            LOCAL_SCRIPT_PATH="etl/${SCRIPT_NAME}"
+            S3_BUCKET="$s3_bucket"
+            
+            # Generate job name from script
+            JOB_NAME=$(echo "$script_name" | sed 's/\.py$//' | sed 's/_/-/g')
+            
+            # Show configuration
+            show_job_info "$script_name" "$JOB_NAME" "$job_type"
+            
+            # Validate and deploy
             check_aws_cli
             check_script_exists
-            
-            log_info "Deploying to AWS region: $AWS_REGION"
-            log_info "Using S3 bucket: $s3_bucket"
             
             local account_id=$(get_account_id)
             local role_arn=$(check_iam_role "$account_id")
             local script_location=$(upload_script "$s3_bucket")
             
-            create_glue_job "$script_location" "$role_arn"
+            create_glue_job "$script_location" "$role_arn" "$job_type"
             ;;
         "run")
             local year="$2"
+            local job_name="$3"
+            
+            if [ -z "$year" ]; then
+                log_error "Year parameter is required"
+                echo "Usage: $0 run <YEAR> [JOB_NAME]"
+                exit 1
+            fi
+            
+            # Set job name (default if not provided)
+            if [ -n "$job_name" ]; then
+                JOB_NAME="$job_name"
+            else
+                JOB_NAME="s3-csv-to-s3-parquet-shell-job"  # Default job name
+            fi
+            
             check_aws_cli
             log_info "Running job in AWS region: $AWS_REGION"
             run_glue_job "$year"
@@ -315,6 +548,15 @@ main() {
             list_jobs
             ;;
         "delete")
+            local job_name="$2"
+            
+            # Set job name (default if not provided)
+            if [ -n "$job_name" ]; then
+                JOB_NAME="$job_name"
+            else
+                JOB_NAME="s3-csv-to-s3-parquet-shell-job"  # Default job name
+            fi
+            
             check_aws_cli
             delete_job
             ;;

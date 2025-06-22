@@ -212,7 +212,7 @@ class TestS3CSVToParquetGlueJob(unittest.TestCase):
         with patch.object(etl_module, 'convert_csv_to_parquet') as mock_convert:
             with patch.object(etl_module, 'GLUE_AVAILABLE', False):
                 etl_module.main()
-                mock_convert.assert_called_once_with(2024)  # Default year
+                mock_convert.assert_called_once_with(2025)  # Default year
 
     def test_glue_mock_function(self):
         """Test the mock getResolvedOptions function"""
@@ -222,7 +222,7 @@ class TestS3CSVToParquetGlueJob(unittest.TestCase):
         
         # Test without arguments
         result = etl_module.getResolvedOptions(['script.py'], ['YEAR'])
-        self.assertEqual(result['YEAR'], '2024')
+        self.assertEqual(result['YEAR'], '2025')
 
 
 class TestETLIntegration(unittest.TestCase):
