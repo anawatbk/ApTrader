@@ -20,10 +20,14 @@ SHELL_JOB_CONFIG=(
     "NUMBER_OF_WORKERS="
 )
 
+#G.1X worker type, each worker maps to 1 DPU (4 vCPUs, 16 GB of memory) with 94GB disk, and provides 1 executor per worker.
+#G.2X worker type, each worker maps to 2 DPU (8 vCPUs, 32 GB of memory) with 138GB disk, and provides 1 executor per worker.
+#G.4X worker type, each worker maps to 4 DPU (16 vCPUs, 64 GB of memory) with 256GB disk, and provides 1 executor per worker.
+#G.8X worker type, each worker maps to 8 DPU (32 vCPUs, 128 GB of memory) with 512GB disk, and provides 1 executor per worker.
 SPARK_JOB_CONFIG=(
     "MAX_CAPACITY="
     "TIMEOUT=2880"
-    "WORKER_TYPE=G.1X"
+    "WORKER_TYPE=G.2X"
     "NUMBER_OF_WORKERS=2"
 )
 
@@ -311,7 +315,7 @@ run_glue_job() {
         read -p "Do you want to monitor the job progress? (y/N): " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            monitor_job "$job_run_id"
+            monitor_job "$job_run_id" "$JOB_NAME"
         fi
     else
         log_error "Failed to start job"
@@ -321,13 +325,14 @@ run_glue_job() {
 
 monitor_job() {
     local job_run_id="$1"
+    local job_name="$2"
     
-    log_info "Monitoring job progress (Ctrl+C to stop monitoring)..."
+    log_info "Monitoring job progress for: $job_name (Ctrl+C to stop monitoring)..."
     
     while true; do
         local status=$(aws glue get-job-run \
             --region "$AWS_REGION" \
-            --job-name "$JOB_NAME" \
+            --job-name "$job_name" \
             --run-id "$job_run_id" \
             --query JobRun.JobRunState --output text)
         
@@ -347,7 +352,7 @@ monitor_job() {
                 # Get error details
                 local error_string=$(aws glue get-job-run \
                     --region "$AWS_REGION" \
-                    --job-name "$JOB_NAME" \
+                    --job-name "$job_name" \
                     --run-id "$job_run_id" \
                     --query JobRun.ErrorMessage --output text)
                 
@@ -391,7 +396,7 @@ show_usage() {
     echo "Commands:"
     echo "  deploy [SCRIPT] [--options]    Deploy ETL script to AWS Glue"
     echo "  run <YEAR> [JOB_NAME]          Execute ETL job for specific year"
-    echo "  monitor <JOB_RUN_ID>           Monitor a running job"
+    echo "  monitor <JOB_RUN_ID> [JOB_NAME] Monitor a running job (defaults to s3-csv-to-s3-parquet-shell-job)"
     echo "  list                           List existing Glue jobs"
     echo "  delete [JOB_NAME]              Delete the specified Glue job"
     echo "  help                           Show this help message"
@@ -425,6 +430,10 @@ show_usage() {
     echo "  # Run jobs:"
     echo "  $0 run 2025 s3-csv-to-s3-parquet-spark-job"
     echo "  $0 run 2025                                     # Uses default job"
+    echo
+    echo "  # Monitor jobs:"
+    echo "  $0 monitor jr_1234567890abcdef my-custom-job    # Monitor specific job"
+    echo "  $0 monitor jr_1234567890abcdef                  # Uses default job name"
     echo
     echo "  # List available scripts:"
     echo "  $0 deploy --list-scripts"
@@ -535,13 +544,17 @@ main() {
             ;;
         "monitor")
             local job_run_id="$2"
+            local job_name="${3:-s3-csv-to-s3-parquet-shell-job}"  # Default job name if not provided
+            
             if [ -z "$job_run_id" ]; then
                 log_error "Job Run ID is required"
-                echo "Usage: $0 monitor <JOB_RUN_ID>"
+                echo "Usage: $0 monitor <JOB_RUN_ID> [JOB_NAME]"
                 exit 1
             fi
+            
             check_aws_cli
-            monitor_job "$job_run_id"
+            log_info "Using job name: $job_name"
+            monitor_job "$job_run_id" "$job_name"
             ;;
         "list")
             check_aws_cli
