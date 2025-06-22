@@ -16,11 +16,11 @@ except ImportError:
         """Mock implementation for local testing"""
         if len(argv) < 2:
             print("Local testing mode - using default year 2024")
-            return {'JOB_NAME': 'local-test', 'YEAR': '2024'}
+            return {'YEAR': '2024'}
         else:
             # Parse local command line arguments
             year = argv[1] if len(argv) > 1 else '2024'
-            return {'JOB_NAME': 'local-test', 'YEAR': year}
+            return {'YEAR': year}
 
 S3_CSV_INPUT_TEMPLATE = 's3://anawatp-us-stocks/csv/{year}-*.csv.gz'
 PARQUET_OUTPUT_PATH = 's3://anawatp-us-stocks/parquet'
@@ -179,12 +179,13 @@ def main():
         # Detect environment and get parameters
         if GLUE_AVAILABLE:
             logger.info("Running in AWS Glue environment")
-            args = getResolvedOptions(sys.argv, ['JOB_NAME', 'YEAR'])
+            args = getResolvedOptions(sys.argv, ['YEAR'])
         else:
             logger.info("Running in local development environment")
-            args = getResolvedOptions(sys.argv, ['JOB_NAME', 'YEAR'])
+            args = getResolvedOptions(sys.argv, ['YEAR'])
         
-        job_name = args['JOB_NAME']
+        job_name = 'csv-to-parquet-etl'
+
         year = int(args['YEAR'])
         
         logger.info(f"ETL job: {job_name}")

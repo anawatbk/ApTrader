@@ -7,11 +7,11 @@ set -e  # Exit on any error
 
 # Configuration
 AWS_REGION="us-west-2"
-DEFAULT_S3_BUCKET="glue-scripts-bucket"
+DEFAULT_S3_BUCKET="ap-glue-scripts-bucket"
 SCRIPT_NAME="s3_csv_to_s3_parquet_glue_shell_job.py"
 LOCAL_SCRIPT_PATH="etl/${SCRIPT_NAME}"
 JOB_NAME="csv-to-parquet-etl"
-GLUE_ROLE_NAME="AWSGlueServiceRole"
+GLUE_ROLE_NAME="AWSGlueServiceRole-Default"
 PYARROW_VERSION="14.0.1"
 MAX_CAPACITY=1
 TIMEOUT=2880  # 48 hours in minutes
@@ -74,10 +74,10 @@ upload_script() {
     local s3_bucket="$1"
     local s3_path="s3://${s3_bucket}/${SCRIPT_NAME}"
     
-    log_info "Uploading script to S3: $s3_path"
+    log_info "Uploading script to S3: $s3_path" >&2
     
-    if aws s3 cp "$LOCAL_SCRIPT_PATH" "$s3_path"; then
-        log_success "Script uploaded successfully"
+    if aws s3 cp "$LOCAL_SCRIPT_PATH" "$s3_path" >&2; then
+        log_success "Script uploaded successfully" >&2
         echo "$s3_path"
     else
         log_error "Failed to upload script to S3"
@@ -90,7 +90,7 @@ check_iam_role() {
     local role_arn="arn:aws:iam::${account_id}:role/${GLUE_ROLE_NAME}"
     
     if aws iam get-role --role-name "$GLUE_ROLE_NAME" &> /dev/null; then
-        log_success "IAM role exists: $GLUE_ROLE_NAME"
+        log_success "IAM role exists: $GLUE_ROLE_NAME" >&2
         echo "$role_arn"
     else
         log_error "IAM role not found: $GLUE_ROLE_NAME"
@@ -123,11 +123,10 @@ create_glue_job() {
     
     aws glue create-job \
         --region "$AWS_REGION" \
-        --job-name "$JOB_NAME" \
+        --name "$JOB_NAME" \
         --role "$role_arn" \
         --command Name=pythonshell,ScriptLocation="$script_location",PythonVersion=3.9 \
-        --additional-python-modules "pyarrow==$PYARROW_VERSION" \
-        --default-arguments '{"--job-bookmark-option":"job-bookmark-disable"}' \
+        --default-arguments "{\"--job-bookmark-option\":\"job-bookmark-disable\",\"--additional-python-modules\":\"pyarrow==$PYARROW_VERSION\"}" \
         --max-capacity "$MAX_CAPACITY" \
         --timeout "$TIMEOUT" \
         --description "ETL job to convert S3 CSV files to partitioned Parquet format with timezone conversion and trading hours filtering"
@@ -145,7 +144,7 @@ update_glue_job() {
     aws glue update-job \
         --region "$AWS_REGION" \
         --job-name "$JOB_NAME" \
-        --job-update Role="$role_arn",Command='{Name=pythonshell,ScriptLocation='$script_location',PythonVersion=3.9}',DefaultArguments='{"--job-bookmark-option":"job-bookmark-disable"}',MaxCapacity="$MAX_CAPACITY",Timeout="$TIMEOUT",AdditionalPythonModules="pyarrow==$PYARROW_VERSION"
+        --job-update Role="$role_arn",Command='{Name=pythonshell,ScriptLocation='$script_location',PythonVersion=3.9}',DefaultArguments='{"--job-bookmark-option":"job-bookmark-disable","--additional-python-modules":"pyarrow='$PYARROW_VERSION'"}',MaxCapacity="$MAX_CAPACITY",Timeout="$TIMEOUT"
     
     log_success "Glue job updated: $JOB_NAME"
 }
@@ -164,7 +163,7 @@ run_glue_job() {
     local job_run_id=$(aws glue start-job-run \
         --region "$AWS_REGION" \
         --job-name "$JOB_NAME" \
-        --arguments --YEAR="$year" \
+        --arguments "{\"--YEAR\":\"$year\"}" \
         --query JobRunId --output text)
     
     if [ $? -eq 0 ]; then
@@ -282,12 +281,6 @@ main() {
     case "$command" in
         "deploy")
             local s3_bucket="${2:-$DEFAULT_S3_BUCKET}"
-            if [ "$s3_bucket" = "your-glue-scripts-bucket" ]; then
-                log_warning "Using default S3 bucket name: $s3_bucket"
-                log_warning "Please update DEFAULT_S3_BUCKET in the script or provide a bucket name"
-                log_info "Usage: $0 deploy <S3_BUCKET>"
-                exit 1
-            fi
             
             check_aws_cli
             check_script_exists

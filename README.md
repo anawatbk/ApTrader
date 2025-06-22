@@ -147,23 +147,6 @@ ApTrader/
 └── requirements.txt       # Dependencies
 ```
 
-### Configuration
-
-The project uses `config.toml` for application configuration:
-
-```toml
-[aws]
-region = "us-east-1"
-profile = "default"
-
-[aws.s3]
-polygon_bucket = "your-polygon-bucket"
-output_bucket = "your-output-bucket"
-
-[data_client]
-base_prefix = "parquet"
-cache_enabled = false
-```
 
 ### Running ETL Scripts
 
@@ -173,6 +156,11 @@ python etl/s3_csv_to_s3_parquet_job.py
 
 # Example: Local CSV to S3
 python etl/local_csv_to_s3.py
+
+# Deploy and run AWS Glue ETL jobs
+./shell_scripts/deploy_glue_etl.sh deploy my-bucket-name
+./shell_scripts/deploy_glue_etl.sh run 2024
+./shell_scripts/deploy_glue_etl.sh monitor jr_1234567890abcdef
 ```
 
 ### Adding New Tests

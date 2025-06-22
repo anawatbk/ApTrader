@@ -217,14 +217,12 @@ class TestS3CSVToParquetGlueJob(unittest.TestCase):
     def test_glue_mock_function(self):
         """Test the mock getResolvedOptions function"""
         # Test with year argument
-        result = etl_module.getResolvedOptions(['script.py', '2023'], ['JOB_NAME', 'YEAR'])
+        result = etl_module.getResolvedOptions(['script.py', '2023'], ['YEAR'])
         self.assertEqual(result['YEAR'], '2023')
-        self.assertEqual(result['JOB_NAME'], 'local-test')
         
         # Test without arguments
-        result = etl_module.getResolvedOptions(['script.py'], ['JOB_NAME', 'YEAR'])
+        result = etl_module.getResolvedOptions(['script.py'], ['YEAR'])
         self.assertEqual(result['YEAR'], '2024')
-        self.assertEqual(result['JOB_NAME'], 'local-test')
 
 
 class TestETLIntegration(unittest.TestCase):
