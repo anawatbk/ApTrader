@@ -129,14 +129,14 @@ class QueryBuilder:
         filtered_df = df.copy()
         
         # Apply date range filter if specified
-        if self.start_date and self.end_date and 'timestamp' in df.columns:
+        if self.start_date and self.end_date and 'window_start_et' in df.columns:
             # Convert timestamp column to datetime if it's not already
-            if not pd.api.types.is_datetime64_any_dtype(filtered_df['timestamp']):
-                filtered_df['timestamp'] = pd.to_datetime(filtered_df['timestamp'])
+            if not pd.api.types.is_datetime64_any_dtype(filtered_df['window_start_et']):
+                filtered_df['window_start_et'] = pd.to_datetime(filtered_df['window_start_et'])
                 
             filtered_df = filtered_df[
-                (filtered_df['timestamp'].dt.date >= self.start_date) &
-                (filtered_df['timestamp'].dt.date <= self.end_date)
+                (filtered_df['window_start_et'].dt.date >= self.start_date) &
+                (filtered_df['window_start_et'].dt.date <= self.end_date)
             ]
             
         # Apply ticker filter if specified and not already filtered by partition

@@ -172,9 +172,10 @@ class S3StockDataClient:
             except Exception as e:
                 self.logger.error(f"Error processing partition {path}: {e}")
                 continue
-                
-    def list_partitions(self, year: Optional[int] = None, 
-                       ticker: Optional[str] = None) -> List[Dict[str, Any]]:
+
+    def list_partitions(self,
+                        year: Optional[int] = None,
+                        ticker: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         List available partitions in S3
         
@@ -198,6 +199,7 @@ class S3StockDataClient:
         partitions = []
         
         try:
+            # anawatp-us-stocks/parquet
             base_search_path = self.base_path.replace('s3://', '')
             
             if year and ticker:
@@ -207,23 +209,21 @@ class S3StockDataClient:
                         'year': year,
                         'ticker': ticker.upper(),
                         'path': f"s3://{search_path}",
-                        'files': len(self._get_parquet_files(f"s3://{search_path}"))
                     })
             elif year:
                 search_path = f"{base_search_path}/year={year}"
                 if self.s3fs.exists(search_path):
-                    ticker_paths = self.s3fs.ls(search_path)
+                    ticker_paths = self.s3fs.ls(search_path, detail=False)
                     for ticker_path in ticker_paths:
                         ticker_name = ticker_path.split('ticker=')[-1]
                         partitions.append({
                             'year': year,
                             'ticker': ticker_name,
                             'path': f"s3://{ticker_path}",
-                            'files': len(self._get_parquet_files(f"s3://{ticker_path}"))
                         })
             elif ticker:
-                # List all years for specific ticker
-                year_paths = self.s3fs.ls(base_search_path)
+                # List all years for a specific ticker
+                year_paths = self.s3fs.ls(base_search_path, detail=False)
                 for year_path in year_paths:
                     if 'year=' in year_path:
                         year_num = int(year_path.split('year=')[-1])
@@ -233,7 +233,6 @@ class S3StockDataClient:
                                 'year': year_num,
                                 'ticker': ticker.upper(),
                                 'path': f"s3://{ticker_path}",
-                                'files': len(self._get_parquet_files(f"s3://{ticker_path}"))
                             })
             else:
                 # List all years
@@ -241,7 +240,7 @@ class S3StockDataClient:
                 for year_path in year_paths:
                     if 'year=' in year_path:
                         year_num = int(year_path.split('year=')[-1])
-                        ticker_paths = self.s3fs.ls(year_path)
+                        ticker_paths = self.s3fs.ls(year_path, detail=False)
                         for ticker_path in ticker_paths:
                             if 'ticker=' in ticker_path:
                                 ticker_name = ticker_path.split('ticker=')[-1]
@@ -249,7 +248,6 @@ class S3StockDataClient:
                                     'year': year_num,
                                     'ticker': ticker_name,
                                     'path': f"s3://{ticker_path}",
-                                    'files': len(self._get_parquet_files(f"s3://{ticker_path}"))
                                 })
                                 
         except Exception as e:

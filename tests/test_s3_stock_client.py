@@ -85,7 +85,7 @@ class TestQueryBuilder:
     def test_apply_filters_date_range(self):
         """Test applying date range filters to DataFrame"""
         df = pd.DataFrame({
-            'timestamp': pd.to_datetime(['2024-01-01', '2024-06-01', '2024-12-31']),
+            'window_start_et': pd.to_datetime(['2024-01-01', '2024-06-01', '2024-12-31']),
             'ticker': ['AAPL', 'AAPL', 'AAPL'],
             'close': [100, 110, 120]
         })
@@ -94,12 +94,12 @@ class TestQueryBuilder:
         filtered_df = query.apply_filters(df)
         
         assert len(filtered_df) == 2
-        assert filtered_df['timestamp'].dt.date.max() <= date(2024, 6, 30)
+        assert filtered_df['window_start_et'].dt.date.max() <= date(2024, 6, 30)
         
     def test_apply_filters_columns(self):
         """Test applying column selection filters"""
         df = pd.DataFrame({
-            'timestamp': pd.to_datetime(['2024-01-01']),
+            'window_start_et': pd.to_datetime(['2024-01-01']),
             'ticker': ['AAPL'],
             'open': [95],
             'close': [100],
@@ -198,7 +198,7 @@ class TestS3StockDataClient:
         
         # Mock DataFrame reading
         test_df = pd.DataFrame({
-            'timestamp': pd.to_datetime(['2024-01-01']),
+            'window_start_et': pd.to_datetime(['2024-01-01']),
             'ticker': ['AAPL'],
             'close': [100]
         })
@@ -223,6 +223,169 @@ class TestS3StockDataClient:
             client.get_data(tickers='NONEXISTENT', years=2024)
             
     @patch('clients.s3_stock_client.s3fs.S3FileSystem')
+    def test_get_data_date_range_filtering(self, mock_s3fs):
+        """Test date range filtering in get_data method"""
+        mock_fs = Mock()
+        mock_s3fs.return_value = mock_fs
+        
+        # Mock partition existence and file listing
+        mock_fs.exists.return_value = True
+        mock_fs.glob.return_value = ['test-bucket/parquet/year=2024/ticker=AAPL/file1.parquet']
+        
+        # Create test DataFrame with timestamps spanning multiple dates
+        test_df = pd.DataFrame({
+            'window_start_et': pd.to_datetime([
+                '2024-01-01 10:00:00',  # Should be included
+                '2024-01-02 11:00:00',  # Should be included  
+                '2024-01-03 12:00:00',  # Should be included (end date boundary)
+                '2024-01-04 13:00:00',  # Should be excluded
+                '2023-12-31 14:00:00'   # Should be excluded
+            ]),
+            'ticker': ['AAPL'] * 5,
+            'close': [100, 101, 102, 103, 99],
+            'volume': [1000, 1100, 1200, 1300, 900]
+        })
+        
+        with patch('pandas.read_parquet', return_value=test_df):
+            client = S3StockDataClient(bucket='test-bucket')
+            
+            # Test date range filtering
+            result = client.get_data(
+                tickers='AAPL', 
+                years=2024,
+                start_date='2024-01-01',
+                end_date='2024-01-03'
+            )
+            
+            # Should only include records from 2024-01-01 to 2024-01-03
+            assert not result.empty, "Result should not be empty"
+            assert len(result) == 3, f"Expected 3 records, got {len(result)}"
+            
+            # Check that all returned dates are within range
+            result_dates = pd.to_datetime(result['window_start_et']).dt.date
+            assert result_dates.min() >= date(2024, 1, 1), "Min date should be >= start_date"
+            assert result_dates.max() <= date(2024, 1, 3), "Max date should be <= end_date"
+            
+            # Check specific excluded records
+            assert 103 not in result['close'].values, "Record from 2024-01-04 should be excluded"
+            assert 99 not in result['close'].values, "Record from 2023-12-31 should be excluded"
+            
+    @patch('clients.s3_stock_client.s3fs.S3FileSystem')
+    def test_get_data_date_range_no_matches(self, mock_s3fs):
+        """Test date range filtering when no data matches the range"""
+        mock_fs = Mock()
+        mock_s3fs.return_value = mock_fs
+        
+        mock_fs.exists.return_value = True
+        mock_fs.glob.return_value = ['test-bucket/parquet/year=2024/ticker=AAPL/file1.parquet']
+        
+        # Create test DataFrame with timestamps outside the query range
+        test_df = pd.DataFrame({
+            'window_start_et': pd.to_datetime([
+                '2024-01-10 10:00:00',  # All outside range
+                '2024-01-11 11:00:00',
+                '2024-01-12 12:00:00'
+            ]),
+            'ticker': ['AAPL'] * 3,
+            'close': [100, 101, 102]
+        })
+        
+        with patch('pandas.read_parquet', return_value=test_df):
+            client = S3StockDataClient(bucket='test-bucket')
+            
+            # Test date range that doesn't match any data
+            with pytest.raises(DataNotFoundError):
+                client.get_data(
+                    tickers='AAPL',
+                    years=2024, 
+                    start_date='2024-01-01',
+                    end_date='2024-01-05'
+                )
+                
+    @patch('clients.s3_stock_client.s3fs.S3FileSystem')
+    def test_get_data_date_range_boundary_conditions(self, mock_s3fs):
+        """Test date range boundary conditions (inclusive/exclusive)"""
+        mock_fs = Mock()
+        mock_s3fs.return_value = mock_fs
+        
+        mock_fs.exists.return_value = True
+        mock_fs.glob.return_value = ['test-bucket/parquet/year=2024/ticker=AAPL/file1.parquet']
+        
+        # Create test DataFrame with exact boundary timestamps
+        test_df = pd.DataFrame({
+            'window_start_et': pd.to_datetime([
+                '2024-01-01 00:00:00',  # Exact start boundary
+                '2024-01-01 12:00:00',  # Within range
+                '2024-01-03 23:59:59',  # Near end boundary
+                '2024-01-04 00:00:00'   # Just outside end boundary
+            ]),
+            'ticker': ['AAPL'] * 4,
+            'close': [100, 101, 102, 103],
+            'volume': [1000, 1100, 1200, 1300]
+        })
+        
+        with patch('pandas.read_parquet', return_value=test_df):
+            client = S3StockDataClient(bucket='test-bucket')
+            
+            result = client.get_data(
+                tickers='AAPL',
+                years=2024,
+                start_date='2024-01-01', 
+                end_date='2024-01-03'
+            )
+            
+            # Should include start boundary but exclude records after end date
+            assert not result.empty, "Result should not be empty"
+            # The exact count depends on whether the filtering is inclusive/exclusive
+            # This test will reveal the actual behavior
+            result_dates = pd.to_datetime(result['window_start_et']).dt.date
+            
+            # At minimum, should include start date
+            assert date(2024, 1, 1) in result_dates.values, "Start date should be included"
+            
+            # Should not include dates after end date
+            assert date(2024, 1, 4) not in result_dates.values, "Dates after end_date should be excluded"
+            
+    @patch('clients.s3_stock_client.s3fs.S3FileSystem')  
+    def test_get_data_cross_year_date_range(self, mock_s3fs):
+        """Test date range filtering across multiple years"""
+        mock_fs = Mock()
+        mock_s3fs.return_value = mock_fs
+        
+        mock_fs.exists.return_value = True 
+        mock_fs.glob.return_value = ['test-bucket/parquet/year=2023/ticker=AAPL/file1.parquet',
+                                    'test-bucket/parquet/year=2024/ticker=AAPL/file1.parquet']
+        
+        # Create test DataFrame spanning across years
+        test_df = pd.DataFrame({
+            'window_start_et': pd.to_datetime([
+                '2023-12-30 10:00:00',  # Should be excluded
+                '2023-12-31 10:00:00',  # Should be included
+                '2024-01-01 10:00:00',  # Should be included
+                '2024-01-02 10:00:00'   # Should be excluded
+            ]),
+            'ticker': ['AAPL'] * 4,
+            'close': [99, 100, 101, 102]
+        })
+        
+        with patch('pandas.read_parquet', return_value=test_df):
+            client = S3StockDataClient(bucket='test-bucket')
+            
+            result = client.get_data(
+                tickers='AAPL',
+                years=[2023, 2024],  # Multiple years
+                start_date='2023-12-31',
+                end_date='2024-01-01'
+            )
+            
+            assert not result.empty, "Result should not be empty"
+            
+            # Check that only records within the cross-year range are included
+            result_dates = pd.to_datetime(result['window_start_et']).dt.date
+            assert date(2023, 12, 30) not in result_dates.values, "Date before range should be excluded"
+            assert date(2024, 1, 2) not in result_dates.values, "Date after range should be excluded"
+            
+    @patch('clients.s3_stock_client.s3fs.S3FileSystem')
     def test_list_partitions_by_year(self, mock_s3fs):
         """Test partition listing by year"""
         mock_fs = Mock()
@@ -239,7 +402,6 @@ class TestS3StockDataClient:
         assert len(partitions) > 0
         assert partitions[0]['year'] == 2024
         assert partitions[0]['ticker'] == 'AAPL'
-        assert partitions[0]['files'] == 2
         
     @patch('clients.s3_stock_client.s3fs.S3FileSystem')
     def test_list_partitions_by_ticker(self, mock_s3fs):
@@ -268,7 +430,6 @@ class TestS3StockDataClient:
         assert partitions[1]['ticker'] == 'AAPL'
         assert partitions[0]['year'] == 2023
         assert partitions[1]['year'] == 2024
-        assert all(p['files'] == 2 for p in partitions)
         
     @patch('clients.s3_stock_client.s3fs.S3FileSystem')
     def test_list_partitions_by_year_and_ticker(self, mock_s3fs):
@@ -286,7 +447,6 @@ class TestS3StockDataClient:
         assert len(partitions) == 1
         assert partitions[0]['year'] == 2024
         assert partitions[0]['ticker'] == 'AAPL'
-        assert partitions[0]['files'] == 2
         
     @patch('clients.s3_stock_client.s3fs.S3FileSystem')
     def test_list_partitions_ticker_not_found(self, mock_s3fs):
@@ -354,7 +514,7 @@ class TestS3StockDataClient:
         
         # Mock chunked reading
         test_df = pd.DataFrame({
-            'timestamp': pd.to_datetime(['2024-01-01', '2024-01-02']),
+            'window_start_et': pd.to_datetime(['2024-01-01', '2024-01-02']),
             'ticker': ['AAPL', 'AAPL'],
             'close': [100, 101]
         })
