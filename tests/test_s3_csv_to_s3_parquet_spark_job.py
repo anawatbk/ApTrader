@@ -156,7 +156,7 @@ class TestSparkETLProcessCsvToParquet(unittest.TestCase):
                 self.assertGreater(len(result_data), 0, "Must have processed data")
                 
                 # MUST have expected columns
-                expected_columns = {"ticker", "window_start", "open", "high", "low", "close", "volume", "transactions", "year"}
+                expected_columns = {"ticker", "window_start_et", "open", "high", "low", "close", "volume", "transactions", "year"}
                 actual_columns = set(result_df.columns)
                 self.assertEqual(expected_columns, actual_columns)
                 
@@ -328,6 +328,7 @@ class TestSparkETLProcessCsvToParquet(unittest.TestCase):
                 self.assertIsInstance(first_row.volume, int)
                 self.assertIsInstance(first_row.transactions, int)
                 self.assertIsInstance(first_row.year, int)
+                # window_start_et should be a timestamp (datetime)
                 
                 # Year column MUST be added correctly
                 years = {row.year for row in result_data}

@@ -244,6 +244,7 @@ create_glue_job() {
             --name "$JOB_NAME" \
             --role "$role_arn" \
             --command Name="$COMMAND_TYPE",ScriptLocation="$script_location" \
+            --glue-version "5.0" \
             --default-arguments "{\"--job-bookmark-option\":\"job-bookmark-disable\",\"--enable-continuous-cloudwatch-log\":\"true\",\"--enable-metrics\":\"\"}" \
             --worker-type "$WORKER_TYPE" \
             --number-of-workers "$NUMBER_OF_WORKERS" \
@@ -277,13 +278,13 @@ update_glue_job() {
         aws glue update-job \
             --region "$AWS_REGION" \
             --job-name "$JOB_NAME" \
-            --job-update Role="$role_arn",Command="{Name=$COMMAND_TYPE,ScriptLocation=$script_location}",DefaultArguments='{"--job-bookmark-option":"job-bookmark-disable","--enable-continuous-cloudwatch-log":"true","--enable-metrics":""}',WorkerType="$WORKER_TYPE",NumberOfWorkers="$NUMBER_OF_WORKERS",Timeout="$TIMEOUT"
+            --job-update "{\"Role\":\"$role_arn\",\"Command\":{\"Name\":\"$COMMAND_TYPE\",\"ScriptLocation\":\"$script_location\"},\"DefaultArguments\":{\"--job-bookmark-option\":\"job-bookmark-disable\",\"--enable-continuous-cloudwatch-log\":\"true\",\"--enable-metrics\":\"\"},\"WorkerType\":\"$WORKER_TYPE\",\"NumberOfWorkers\":$NUMBER_OF_WORKERS,\"Timeout\":$TIMEOUT,\"GlueVersion\":\"5.0\"}" > /dev/null
     else
         # Python Shell job update
         aws glue update-job \
             --region "$AWS_REGION" \
             --job-name "$JOB_NAME" \
-            --job-update Role="$role_arn",Command="{Name=$COMMAND_TYPE,ScriptLocation=$script_location,PythonVersion=3.9}",DefaultArguments='{"--job-bookmark-option":"job-bookmark-disable","--enable-continuous-cloudwatch-log":"true","--enable-metrics":""}',MaxCapacity="$MAX_CAPACITY",Timeout="$TIMEOUT"
+            --job-update "{\"Role\":\"$role_arn\",\"Command\":{\"Name\":\"$COMMAND_TYPE\",\"ScriptLocation\":\"$script_location\",\"PythonVersion\":\"3.9\"},\"DefaultArguments\":{\"--job-bookmark-option\":\"job-bookmark-disable\",\"--enable-continuous-cloudwatch-log\":\"true\",\"--enable-metrics\":\"\"},\"MaxCapacity\":$MAX_CAPACITY,\"Timeout\":$TIMEOUT}" > /dev/null
     fi
     
     log_success "Glue job updated: $JOB_NAME ($JOB_TYPE_DISPLAY)"
@@ -396,7 +397,7 @@ show_usage() {
     echo "Commands:"
     echo "  deploy [SCRIPT] [--options]    Deploy ETL script to AWS Glue"
     echo "  run <YEAR> [JOB_NAME]          Execute ETL job for specific year"
-    echo "  monitor <JOB_RUN_ID> [JOB_NAME] Monitor a running job (defaults to s3-csv-to-s3-parquet-shell-job)"
+    echo "  monitor <JOB_RUN_ID> [JOB_NAME] Monitor a running job (defaults to etl-spark-job)"
     echo "  list                           List existing Glue jobs"
     echo "  delete [JOB_NAME]              Delete the specified Glue job"
     echo "  help                           Show this help message"
@@ -535,7 +536,7 @@ main() {
             if [ -n "$job_name" ]; then
                 JOB_NAME="$job_name"
             else
-                JOB_NAME="s3-csv-to-s3-parquet-shell-job"  # Default job name
+                JOB_NAME="etl-spark-job"  # Default job name
             fi
             
             check_aws_cli
@@ -544,7 +545,7 @@ main() {
             ;;
         "monitor")
             local job_run_id="$2"
-            local job_name="${3:-s3-csv-to-s3-parquet-shell-job}"  # Default job name if not provided
+            local job_name="${3:-etl-spark-job}"  # Default job name if not provided
             
             if [ -z "$job_run_id" ]; then
                 log_error "Job Run ID is required"
@@ -567,7 +568,7 @@ main() {
             if [ -n "$job_name" ]; then
                 JOB_NAME="$job_name"
             else
-                JOB_NAME="s3-csv-to-s3-parquet-shell-job"  # Default job name
+                JOB_NAME="etl-spark-job"  # Default job name
             fi
             
             check_aws_cli
