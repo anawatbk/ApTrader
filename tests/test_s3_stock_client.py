@@ -223,8 +223,8 @@ class TestS3StockDataClient:
             client.get_data(tickers='NONEXISTENT', years=2024)
             
     @patch('clients.s3_stock_client.s3fs.S3FileSystem')
-    def test_list_partitions(self, mock_s3fs):
-        """Test partition listing"""
+    def test_list_partitions_by_year(self, mock_s3fs):
+        """Test partition listing by year"""
         mock_fs = Mock()
         mock_s3fs.return_value = mock_fs
         
@@ -240,6 +240,89 @@ class TestS3StockDataClient:
         assert partitions[0]['year'] == 2024
         assert partitions[0]['ticker'] == 'AAPL'
         assert partitions[0]['files'] == 2
+        
+    @patch('clients.s3_stock_client.s3fs.S3FileSystem')
+    def test_list_partitions_by_ticker(self, mock_s3fs):
+        """Test partition listing by ticker across all years"""
+        mock_fs = Mock()
+        mock_s3fs.return_value = mock_fs
+        
+        # Mock directory structure - multiple years
+        mock_fs.ls.side_effect = [
+            # First call: list all years
+            ['test-bucket/parquet/year=2023', 'test-bucket/parquet/year=2024'],
+        ]
+        
+        # Mock ticker path existence for each year
+        def mock_exists(path):
+            return 'ticker=AAPL' in path
+        mock_fs.exists.side_effect = mock_exists
+        
+        mock_fs.glob.return_value = ['file1.parquet', 'file2.parquet']
+        
+        client = S3StockDataClient(bucket='test-bucket')
+        partitions = client.list_partitions(ticker='AAPL')
+        
+        assert len(partitions) == 2
+        assert partitions[0]['ticker'] == 'AAPL'
+        assert partitions[1]['ticker'] == 'AAPL'
+        assert partitions[0]['year'] == 2023
+        assert partitions[1]['year'] == 2024
+        assert all(p['files'] == 2 for p in partitions)
+        
+    @patch('clients.s3_stock_client.s3fs.S3FileSystem')
+    def test_list_partitions_by_year_and_ticker(self, mock_s3fs):
+        """Test partition listing by both year and ticker"""
+        mock_fs = Mock()
+        mock_s3fs.return_value = mock_fs
+        
+        # Mock specific partition exists
+        mock_fs.exists.return_value = True
+        mock_fs.glob.return_value = ['file1.parquet', 'file2.parquet']
+        
+        client = S3StockDataClient(bucket='test-bucket')
+        partitions = client.list_partitions(year=2024, ticker='AAPL')
+        
+        assert len(partitions) == 1
+        assert partitions[0]['year'] == 2024
+        assert partitions[0]['ticker'] == 'AAPL'
+        assert partitions[0]['files'] == 2
+        
+    @patch('clients.s3_stock_client.s3fs.S3FileSystem')
+    def test_list_partitions_ticker_not_found(self, mock_s3fs):
+        """Test partition listing when ticker doesn't exist in any year"""
+        mock_fs = Mock()
+        mock_s3fs.return_value = mock_fs
+        
+        # Mock directory structure - multiple years exist
+        mock_fs.ls.return_value = ['test-bucket/parquet/year=2023', 'test-bucket/parquet/year=2024']
+        
+        # Mock ticker path doesn't exist for any year
+        mock_fs.exists.return_value = False
+        
+        client = S3StockDataClient(bucket='test-bucket')
+        partitions = client.list_partitions(ticker='NONEXISTENT')
+        
+        assert len(partitions) == 0
+        
+    @patch('clients.s3_stock_client.s3fs.S3FileSystem')
+    def test_list_partitions_ticker_case_insensitive(self, mock_s3fs):
+        """Test that ticker filtering is case insensitive"""
+        mock_fs = Mock()
+        mock_s3fs.return_value = mock_fs
+        
+        # Mock directory structure
+        mock_fs.ls.return_value = ['test-bucket/parquet/year=2024']
+        mock_fs.exists.return_value = True
+        mock_fs.glob.return_value = ['file1.parquet']
+        
+        client = S3StockDataClient(bucket='test-bucket')
+        
+        # Test with lowercase ticker
+        partitions = client.list_partitions(ticker='aapl')
+        
+        assert len(partitions) == 1
+        assert partitions[0]['ticker'] == 'AAPL'  # Should be uppercase in result
         
     @patch('clients.s3_stock_client.s3fs.S3FileSystem')
     def test_get_available_tickers(self, mock_s3fs):

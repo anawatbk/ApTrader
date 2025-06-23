@@ -179,11 +179,21 @@ class S3StockDataClient:
         List available partitions in S3
         
         Args:
-            year: Filter by specific year
-            ticker: Filter by specific ticker
+            year: Filter by specific year (optional)
+            ticker: Filter by specific ticker across all years (optional)
             
         Returns:
-            List of partition information dictionaries
+            List of partition information dictionaries with keys:
+            - 'year': Year of the partition
+            - 'ticker': Ticker symbol
+            - 'path': S3 path to the partition
+            - 'files': Number of parquet files in the partition
+            
+        Examples:
+            list_partitions()  # All partitions
+            list_partitions(year=2024)  # All tickers for 2024
+            list_partitions(ticker="AAPL")  # AAPL across all years
+            list_partitions(year=2024, ticker="AAPL")  # AAPL for 2024 only
         """
         partitions = []
         
@@ -211,6 +221,20 @@ class S3StockDataClient:
                             'path': f"s3://{ticker_path}",
                             'files': len(self._get_parquet_files(f"s3://{ticker_path}"))
                         })
+            elif ticker:
+                # List all years for specific ticker
+                year_paths = self.s3fs.ls(base_search_path)
+                for year_path in year_paths:
+                    if 'year=' in year_path:
+                        year_num = int(year_path.split('year=')[-1])
+                        ticker_path = f"{year_path}/ticker={ticker.upper()}"
+                        if self.s3fs.exists(ticker_path):
+                            partitions.append({
+                                'year': year_num,
+                                'ticker': ticker.upper(),
+                                'path': f"s3://{ticker_path}",
+                                'files': len(self._get_parquet_files(f"s3://{ticker_path}"))
+                            })
             else:
                 # List all years
                 year_paths = self.s3fs.ls(base_search_path)
