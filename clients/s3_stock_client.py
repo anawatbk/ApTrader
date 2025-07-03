@@ -80,7 +80,7 @@ class S3StockDataClient:
         except Exception as e:
             raise S3ConnectionError(f"Failed to initialize S3 connection: {e}")
             
-        self.base_path = f"s3://{bucket}/{base_prefix}"
+        self.base_path = f"s3://{bucket}/{base_prefix}/minute_aggs"
         
     def get_data(self, 
                  tickers: Optional[Union[str, List[str]]] = None,
@@ -199,7 +199,7 @@ class S3StockDataClient:
         partitions = []
         
         try:
-            # anawatp-us-stocks/parquet
+            # anawatp-us-stocks/parquet/minute_aggs
             base_search_path = self.base_path.replace('s3://', '')
             
             if year and ticker:

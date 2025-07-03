@@ -41,3 +41,22 @@ class S3ConnectionError(S3ClientError):
 class DataValidationError(S3ClientError):
     """Raised when data doesn't meet expected format or schema"""
     pass
+
+
+class DuckDBConnectionError(S3ClientError):
+    """Raised when there are DuckDB connection issues"""
+    pass
+
+
+class DuckDBQueryError(S3ClientError):
+    """Raised when DuckDB query execution fails"""
+    
+    def __init__(self, query: str, error_message: str):
+        self.query = query
+        self.error_message = error_message
+        super().__init__(f"Query failed: {error_message}\nQuery: {query}")
+
+
+class DuckDBMemoryError(S3ClientError):
+    """Raised when DuckDB runs out of memory during query execution"""
+    pass

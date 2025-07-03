@@ -6,6 +6,7 @@ in parquet format with year/ticker partitioning.
 """
 
 from .s3_stock_client import S3StockDataClient
+from .duckdb_stock_client import DuckDBStockClient
 from .query_builder import QueryBuilder
 from .exceptions import (
     S3ClientError,
@@ -13,16 +14,23 @@ from .exceptions import (
     ConfigurationError,
     DataNotFoundError,
     S3ConnectionError,
-    DataValidationError
+    DataValidationError,
+    DuckDBConnectionError,
+    DuckDBQueryError,
+    DuckDBMemoryError
 )
 
 __all__ = [
     'S3StockDataClient',
+    'DuckDBStockClient',
     'QueryBuilder', 
     'S3ClientError',
     'PartitionNotFoundError',
     'ConfigurationError',
     'DataNotFoundError',
     'S3ConnectionError',
-    'DataValidationError'
+    'DataValidationError',
+    'DuckDBConnectionError',
+    'DuckDBQueryError',
+    'DuckDBMemoryError'
 ]

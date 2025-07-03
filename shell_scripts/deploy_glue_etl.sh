@@ -15,7 +15,7 @@ GLUE_ROLE_NAME="AWSGlueServiceRole-Default"
 # Job type specific configurations
 SHELL_JOB_CONFIG=(
     "MAX_CAPACITY=1.0"
-    "TIMEOUT=2880"
+    "TIMEOUT=480"
     "WORKER_TYPE="
     "NUMBER_OF_WORKERS="
 )
@@ -26,9 +26,9 @@ SHELL_JOB_CONFIG=(
 #G.8X worker type, each worker maps to 8 DPU (32 vCPUs, 128 GB of memory) with 512GB disk, and provides 1 executor per worker.
 SPARK_JOB_CONFIG=(
     "MAX_CAPACITY="
-    "TIMEOUT=2880"
+    "TIMEOUT=480"
     "WORKER_TYPE=G.2X"
-    "NUMBER_OF_WORKERS=2"
+    "NUMBER_OF_WORKERS=10"
 )
 
 # Colors for output

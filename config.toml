@@ -47,6 +47,12 @@ cache_enabled = false
 cache_dir = "~/.aptrader_cache"
 max_memory_usage = "1GB"
 
+[duckdb]
+memory_limit = "2GB"
+temp_directory = "/tmp/duckdb"
+enable_s3_cache = true
+max_threads = 4
+
 [logging]
 level = "INFO"
 format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

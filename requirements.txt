@@ -19,6 +19,9 @@ polygon-api-client>=1.14.4
 requests>=2.32.3
 PyYAML>=6.0.2
 
+# DuckDB for high-performance analytical queries
+duckdb>=1.0.0
+
 # ETL and distributed processing (optional - install with pip install -e .[etl])
 pyspark==3.5.4
 py4j>=0.10.9.7

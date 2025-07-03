@@ -196,3 +196,55 @@ class QueryBuilder:
             'end_date': self.end_date.isoformat() if self.end_date else None,
             'columns': self.columns
         }
+    
+    def to_sql(self, table_pattern: str = "s3://bucket/path/year=*/ticker=*.parquet") -> str:
+        """
+        Generate SQL query for DuckDB based on query parameters
+        
+        Args:
+            table_pattern: S3 path pattern for parquet files
+            
+        Returns:
+            SQL query string optimized for DuckDB execution
+        """
+        # Build SELECT clause
+        if self.columns:
+            select_clause = ", ".join(self.columns)
+        else:
+            select_clause = "*"
+        
+        # Build FROM clause with S3 path pattern
+        from_clause = f"'{table_pattern}'"
+        
+        # Build WHERE clause
+        where_conditions = []
+        
+        # Add year filter for partition pruning
+        if self.years:
+            if len(self.years) == 1:
+                where_conditions.append(f"year = {self.years[0]}")
+            else:
+                year_list = ", ".join(str(year) for year in self.years)
+                where_conditions.append(f"year IN ({year_list})")
+        
+        # Add ticker filter
+        if self.tickers:
+            if len(self.tickers) == 1:
+                where_conditions.append(f"ticker = '{self.tickers[0]}'")
+            else:
+                ticker_list = ", ".join(f"'{ticker}'" for ticker in self.tickers)
+                where_conditions.append(f"ticker IN ({ticker_list})")
+        
+        # Add date range filter
+        if self.start_date and self.end_date:
+            where_conditions.append(
+                f"window_start_et >= '{self.start_date}' AND window_start_et <= '{self.end_date}'"
+            )
+        
+        # Combine query parts
+        query = f"SELECT {select_clause} FROM {from_clause}"
+        
+        if where_conditions:
+            query += " WHERE " + " AND ".join(where_conditions)
+        
+        return query

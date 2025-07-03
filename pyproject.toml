@@ -37,6 +37,7 @@ dependencies = [
     "requests>=2.32.3",
     "PyYAML>=6.0.2",
     "polygon-api-client>=1.14.4",
+    "duckdb>=1.0.0",
 ]
 
 # Optional dependencies for different use cases
