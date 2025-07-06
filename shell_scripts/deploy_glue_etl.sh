@@ -119,10 +119,12 @@ show_job_info() {
 }
 
 list_available_scripts() {
-    log_info "Available ETL scripts in etl/ directory:"
+    log_info "Available ETL job scripts in etl/ directory (ending with '_job'):"
     if [ -d "etl" ]; then
-        for script in etl/*.py; do
+        local found_jobs=false
+        for script in etl/*_job.py; do
             if [ -f "$script" ]; then
+                found_jobs=true
                 script_basename=$(basename "$script")
                 if [[ "$script_basename" == *"spark"* ]]; then
                     echo "  ✓ $script_basename (Spark job)"
@@ -133,6 +135,11 @@ list_available_scripts() {
                 fi
             fi
         done
+        
+        if [ "$found_jobs" = false ]; then
+            log_warning "No job scripts found (scripts ending with '_job.py')"
+            log_info "Available scripts must end with '_job.py' to be listed here"
+        fi
     else
         log_warning "etl/ directory not found"
     fi
@@ -405,7 +412,7 @@ show_usage() {
     echo "Deploy Options:"
     echo "  --job-type spark|shell         Override auto-detected job type"
     echo "  --bucket BUCKET_NAME           Specify S3 bucket (default: $DEFAULT_S3_BUCKET)"
-    echo "  --list-scripts                 List available scripts with detected types"
+    echo "  --list-scripts                 List available job scripts (ending with '_job') with detected types"
     echo "  --help, -h                     Show deploy help"
     echo
     echo "Auto-Detection Rules:"
@@ -436,7 +443,7 @@ show_usage() {
     echo "  $0 monitor jr_1234567890abcdef my-custom-job    # Monitor specific job"
     echo "  $0 monitor jr_1234567890abcdef                  # Uses default job name"
     echo
-    echo "  # List available scripts:"
+    echo "  # List available job scripts (ending with '_job'):"
     echo "  $0 deploy --list-scripts"
     echo
     echo "Configuration:"
